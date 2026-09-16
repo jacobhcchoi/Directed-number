@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Target 0: Directed Darts vs AI</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                        display: ['Fredoka', 'sans-serif'],
+                    },
+                    colors: {
+                        dartBg: '#0f172a',
+                        dartPanel: '#1e293b',
+                        posDart: '#22c55e',
+                        negDart: '#ef4444',
+                        accentYellow: '#f59e0b',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: #0b0f19;
+            color: #f8fafc;
+            user-select: none;
+            overflow-x: hidden;
+        }
+        h1, h2, h3, .font-display {
+            font-family: 'Fredoka', sans-serif;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+        .glow-pos {
+            box-shadow: 0 0 20px rgba(34, 197, 94, 0.4);
+        }
+        .glow-neg {
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+        }
+        
+        /* Dramatic Straight Downward Fall Animation */
+        @keyframes dramaticVerticalFall {
+            0% {
+                transform: scale(1) rotate(0deg);
+            }
+            12% {
+                /* Sudden dramatic shock jump before plummeting */
+                transform: translateY(-35px) scale(1.35) rotate(-15deg);
+            }
+            25% {
+                /* Momentary freeze before gravity takes over */
+                transform: translateY(-20px) scale(1.3) rotate(20deg);
+            }
+            100% {
+                /* Rapid vertical drop straight down */
+                transform: translateY(120vh) scale(1.8) rotate(720deg);
+            }
+        }
+
+        .stickman-falling {
+            z-index: 5 !important;
+            pointer-events: none !important;
+            animation: dramaticVerticalFall 1.5s cubic-bezier(0.55, 0.055, 0.675, 0.19) forwards !important;
+        }
+
+        .stickman-container {
+            z-index: 20; /* Default position during gameplay */
+        }
+
+        /* Explicitly higher z-index for Dartboard Section so it covers falling stickmen */
+        .dartboard-arena-section {
+            z-index: 10 !important;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between">
+
+    <!-- Header Navigation -->
+    <header class="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-30 shadow-lg">
+        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center text-white text-2xl shadow-md">
+                    🎯
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold font-display text-cyan-400 tracking-wide">Target 0: Directed Darts</h1>
+                    <p class="text-xs text-slate-400">Deduct marks using directed integer multiplication</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-3">
+                <button id="rulesBtn" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm px-3 py-2 rounded-xl transition flex items-center gap-2 border border-slate-700">
+                    <i class="fa-solid fa-book-open text-cyan-400"></i> Rules & Cheat Sheet
+                </button>
+                <button id="soundToggleBtn" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm p-2.5 rounded-xl transition border border-slate-700" title="Toggle Sound">
+                    <i id="soundIcon" class="fa-solid fa-volume-high text-emerald-400"></i>
+                </button>
+                <button id="resetGameBtn" class="bg-red-600/80 hover:bg-red-500 text-white text-sm px-3 py-2 rounded-xl transition flex items-center gap-2 shadow-sm">
+                    <i class="fa-solid fa-rotate-right"></i> Reset (99 Marks)
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="max-w-7xl mx-auto w-full p-4 md:p-6 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+        <!-- Left Column: Controls & Scoreboard -->
+        <section class="lg:col-span-4 flex flex-col gap-5 relative z-20">
+
+            <!-- Score display card -->
+            <div class="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-5 shadow-xl relative backdrop-blur">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Goal: Reach 0</span>
+                    <span id="turnsLeftBadge" class="text-xs px-2.5 py-1 rounded-full bg-slate-700 text-slate-300 font-medium">
+                        Board shuffles <b class="text-cyan-400">every throw!</b>
+                    </span>
+                </div>
+
+                <!-- Scores Grid for Player & AI -->
+                <div class="grid grid-cols-1 gap-5 my-2">
+                    <!-- Player Score -->
+                    <div id="playerScoreCard" class="bg-slate-900/60 p-3.5 rounded-xl border-2 border-cyan-500/80 relative">
+                        <div class="flex items-center justify-between text-xs text-cyan-400 font-bold mb-1">
+                            <span><i class="fa-solid fa-user"></i> You</span>
+                            <span id="playerTurnBadge" class="text-[10px] bg-cyan-500/20 px-1.5 py-0.5 rounded">Turn</span>
+                        </div>
+                        <div class="text-3xl font-black font-display text-white mb-2">
+                            <span id="currentScoreDisplay">99</span> <span class="text-xs font-normal text-slate-400">marks</span>
+                        </div>
+                        
+                        <!-- Interactive Number Line (-20 to 120) with Flag on 0 -->
+                        <div id="playerNumberLineTrack" class="w-full relative pt-8 pb-2">
+                            <!-- Track -->
+                            <div class="w-full bg-slate-950 h-3 rounded-full border border-slate-700 relative overflow-visible">
+                                <!-- Zero Center Marker Line (14.28%) -->
+                                <div class="absolute left-[14.28%] top-0 bottom-0 w-0.5 bg-amber-400 z-10"></div>
+                                
+                                <!-- Goal Flag Icon at 0 Position -->
+                                <div class="absolute left-[14.28%] -top-6 -translate-x-1/2 flex flex-col items-center z-20 pointer-events-none" title="Goal: 0">
+                                    <i class="fa-solid fa-flag text-amber-400 text-xs drop-shadow-[0_0_4px_rgba(251,191,36,0.8)] animate-bounce"></i>
+                                </div>
+                            </div>
+                            
+                            <!-- Ticks and Numbers -->
+                            <div class="flex justify-between text-[9px] font-mono text-slate-400 mt-1 px-0.5">
+                                <span class="text-red-400 font-bold">-20</span>
+                                <span class="text-amber-400 font-bold">0 🚩</span>
+                                <span>+35</span>
+                                <span>+70</span>
+                                <span>+120</span>
+                            </div>
+
+                            <!-- Stickman Marker -->
+                            <div id="playerStickman" class="stickman-container absolute top-2 left-[85%] -translate-x-1/2 transition-all duration-500 flex flex-col items-center pointer-events-none">
+                                <svg class="w-6 h-7 text-cyan-400 drop-shadow-[0_0_6px_rgba(6,182,212,0.9)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="4" r="3" fill="currentColor"/>
+                                    <line x1="12" y1="7" x2="12" y2="15"/>
+                                    <line x1="8" y1="10" x2="16" y2="10"/>
+                                    <line x1="12" y1="15" x2="8" y2="22"/>
+                                    <line x1="12" y1="15" x2="16" y2="22"/>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- AI Score -->
+                    <div id="aiScoreCard" class="bg-slate-900/60 p-3.5 rounded-xl border border-slate-700/80 opacity-70 relative">
+                        <div class="flex items-center justify-between text-xs text-slate-400 font-bold mb-1">
+                            <span><i class="fa-solid fa-robot"></i> AI Bot</span>
+                            <span id="aiTurnBadge" class="text-[10px] bg-slate-700 px-1.5 py-0.5 rounded hidden">Turn</span>
+                        </div>
+                        <div class="text-3xl font-black font-display text-white mb-2">
+                            <span id="aiScoreDisplay">99</span> <span class="text-xs font-normal text-slate-400">marks</span>
+                        </div>
+                        
+                        <!-- Interactive Number Line (-20 to 120) with Flag on 0 -->
+                        <div id="aiNumberLineTrack" class="w-full relative pt-8 pb-2">
+                            <!-- Track -->
+                            <div class="w-full bg-slate-950 h-3 rounded-full border border-slate-700 relative overflow-visible">
+                                <!-- Zero Center Marker Line (14.28%) -->
+                                <div class="absolute left-[14.28%] top-0 bottom-0 w-0.5 bg-amber-400 z-10"></div>
+                                
+                                <!-- Goal Flag Icon at 0 Position -->
+                                <div class="absolute left-[14.28%] -top-6 -translate-x-1/2 flex flex-col items-center z-20 pointer-events-none" title="Goal: 0">
+                                    <i class="fa-solid fa-flag text-amber-400 text-xs drop-shadow-[0_0_4px_rgba(251,191,36,0.8)] animate-bounce"></i>
+                                </div>
+                            </div>
+                            
+                            <!-- Ticks and Numbers -->
+                            <div class="flex justify-between text-[9px] font-mono text-slate-400 mt-1 px-0.5">
+                                <span class="text-red-400 font-bold">-20</span>
+                                <span class="text-amber-400 font-bold">0 🚩</span>
+                                <span>+35</span>
+                                <span>+70</span>
+                                <span>+120</span>
+                            </div>
+
+                            <!-- Stickman Marker -->
+                            <div id="aiStickman" class="stickman-container absolute top-2 left-[85%] -translate-x-1/2 transition-all duration-500 flex flex-col items-center pointer-events-none">
+                                <svg class="w-6 h-7 text-purple-400 drop-shadow-[0_0_6px_rgba(192,132,252,0.9)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="4" r="3" fill="currentColor"/>
+                                    <line x1="12" y1="7" x2="12" y2="15"/>
+                                    <line x1="8" y1="10" x2="16" y2="10"/>
+                                    <line x1="12" y1="15" x2="8" y2="22"/>
+                                    <line x1="12" y1="15" x2="16" y2="22"/>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between mt-2 text-xs">
+                    <div id="streakBadge" class="flex items-center gap-1.5 bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 px-2.5 py-1 rounded-xl">
+                        <i class="fa-solid fa-fire"></i>
+                        <span>Streak: <b id="streakCount">0</b></span>
+                    </div>
+                    <span id="underTargetNotice" class="text-amber-400 font-semibold"><i class="fa-solid fa-triangle-exclamation"></i> Danger Zone (-20 to 120)!</span>
+                </div>
+
+                <div class="mt-3 text-xs text-slate-400 flex justify-between items-center border-t border-slate-700/50 pt-2">
+                    <span>Status: <strong id="statusHint" class="text-emerald-400 font-medium">Ready to throw</strong></span>
+                </div>
+            </div>
+
+            <!-- Dart selection card -->
+            <div class="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-5 shadow-xl">
+                <h3 class="text-sm font-semibold text-slate-300 mb-3 flex items-center justify-between">
+                    <span>Choose Dart Type</span>
+                    <span class="text-xs text-slate-400 font-normal">Score + (Dart × Target)</span>
+                </h3>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <button id="selectPosDartBtn" class="relative group p-4 rounded-xl border-2 transition-all duration-200 flex flex-col items-center justify-center gap-2 border-emerald-500 bg-emerald-950/40 glow-pos">
+                        <div class="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-2xl font-bold font-display">
+                            +
+                        </div>
+                        <span class="font-bold text-white text-base">Positive Dart</span>
+                        <span class="text-xs text-emerald-300/80 font-mono">+ (+1 × Board)</span>
+                    </button>
+
+                    <button id="selectNegDartBtn" class="relative group p-4 rounded-xl border-2 transition-all duration-200 flex flex-col items-center justify-center gap-2 border-slate-700 bg-slate-800/50 hover:border-red-500/50">
+                        <div class="w-10 h-10 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center text-2xl font-bold font-display">
+                            -
+                        </div>
+                        <span class="font-bold text-slate-300 text-base">Negative Dart</span>
+                        <span class="text-xs text-red-300/80 font-mono">+ (-1 × Board)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Mode & reshuffle tools -->
+            <div class="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-5 shadow-xl flex flex-col gap-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="text-sm font-semibold text-slate-200">Math Challenge Mode</div>
+                        <p class="text-xs text-slate-400">Solve expression before points deduction</p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="challengeModeToggle" class="sr-only peer">
+                        <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-500"></div>
+                    </label>
+                </div>
+
+                <hr class="border-slate-700/60">
+
+                <div class="flex justify-between items-center text-xs">
+                    <button id="shuffleBoardBtn" class="text-cyan-400 hover:text-cyan-300 flex items-center gap-1.5 transition">
+                        <i class="fa-solid fa-shuffle"></i> Reshuffle Numbers
+                    </button>
+                    <button id="clearLogBtn" class="text-slate-400 hover:text-slate-200 transition">
+                        Clear History
+                    </button>
+                </div>
+            </div>
+
+            <!-- Calculation history log -->
+            <div class="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4 shadow-xl flex flex-col h-52">
+                <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2 flex items-center justify-between">
+                    <span>Calculation History</span>
+                    <i class="fa-solid fa-clock-rotate-left"></i>
+                </h3>
+                <div id="historyList" class="flex-1 overflow-y-auto space-y-2 pr-1 text-xs font-mono">
+                    <div class="text-slate-500 text-center py-6 italic">No throws recorded yet. Aim and hit the target!</div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- Right Column: Interactive Dartboard Arena -->
+        <section class="dartboard-arena-section lg:col-span-8 bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4 md:p-6 shadow-xl flex flex-col items-center justify-center relative min-h-[500px]">
+
+            <div class="w-full text-center mb-2">
+                <p class="text-sm text-slate-300">
+                    Click anywhere on the board to throw your <span id="activeDartLabel" class="font-bold text-emerald-400">Positive (+)</span> dart!
+                </p>
+            </div>
+
+            <!-- Canvas Container -->
+            <div id="canvasContainer" class="relative w-full max-w-[480px] aspect-square flex items-center justify-center my-auto">
+                <canvas id="dartboardCanvas" class="w-full h-full cursor-crosshair rounded-full shadow-2xl touch-none"></canvas>
+                
+                <div id="targetCrosshair" class="absolute pointer-events-none hidden w-8 h-8 -translate-x-1/2 -translate-y-1/2 border border-dashed border-cyan-400 rounded-full flex items-center justify-center">
+                    <div class="w-1.5 h-1.5 bg-cyan-400 rounded-full"></div>
+                </div>
+            </div>
+
+            <div class="w-full flex flex-wrap justify-center gap-4 text-xs text-slate-400 mt-4 border-t border-slate-700/60 pt-3">
+                <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-emerald-500"></span> Positive Target</span>
+                <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-red-500"></span> Negative Target</span>
+                <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-400"></span> Outer Double Ring</span>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modals -->
+    <div id="mathChallengeModal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border-2 border-cyan-500/80 rounded-2xl max-w-md w-full p-6 shadow-2xl relative text-center">
+            <div class="w-12 h-12 bg-cyan-500/20 text-cyan-400 rounded-full flex items-center justify-center text-2xl mx-auto mb-3 font-bold">
+                🧮
+            </div>
+            <h3 class="text-xl font-bold font-display text-white">Math Challenge!</h3>
+            <p class="text-xs text-slate-400 mt-1">Calculate the new total score after this throw:</p>
+
+            <div class="my-5 p-4 bg-slate-800 rounded-xl border border-slate-700 text-center">
+                <div class="text-xs text-slate-400 uppercase font-semibold mb-1">Equation</div>
+                <div id="challengeEquationText" class="text-xl font-mono font-bold text-cyan-300">
+                    99 + [(-1) × (+9)] = ?
+                </div>
+            </div>
+
+            <div id="challengeOptionsGrid" class="grid grid-cols-2 gap-3 my-4"></div>
+            <div id="challengeFeedback" class="text-sm font-semibold h-6 text-center"></div>
+        </div>
+    </div>
+
+    <div id="victoryModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border-2 border-emerald-500 rounded-2xl max-w-lg w-full p-8 shadow-2xl text-center relative overflow-hidden">
+            <div id="victoryIcon" class="w-20 h-20 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center text-4xl mx-auto mb-4 animate-bounce">
+                🏆
+            </div>
+            <h2 id="victoryTitle" class="text-3xl font-extrabold font-display text-emerald-400">EXACTLY 0! YOU WIN!</h2>
+            <p id="victoryMessage" class="text-sm text-slate-300 mt-2">
+                Outstanding! You deducted directed numbers with exact precision to hit 0 marks!
+            </p>
+
+            <div class="my-6 grid grid-cols-2 gap-3 bg-slate-800/80 p-4 rounded-xl border border-slate-700 text-left">
+                <div>
+                    <span class="text-xs text-slate-400">Total Throws:</span>
+                    <div id="victoryThrowsCount" class="text-lg font-bold text-white">0</div>
+                </div>
+                <div>
+                    <span class="text-xs text-slate-400">Highest Streak:</span>
+                    <div id="victoryStreakCount" class="text-lg font-bold text-cyan-400">0</div>
+                </div>
+            </div>
+
+            <button id="playAgainBtn" class="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-extrabold text-base rounded-xl transition shadow-lg glow-pos">
+                Play Again (Reset to 99)
+            </button>
+        </div>
+    </div>
+
+    <div id="rulesModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-xl w-full p-6 shadow-2xl relative max-h-[90vh] flex flex-col">
+            <div class="flex justify-between items-center mb-4 pb-2 border-b border-slate-800">
+                <h3 class="text-xl font-bold font-display text-cyan-400 flex items-center gap-2">
+                    <i class="fa-solid fa-book-open"></i> Directed Numbers Deduction Rules
+                </h3>
+                <button id="closeRulesBtn" class="text-slate-400 hover:text-white text-lg">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="space-y-4 overflow-y-auto text-sm text-slate-300 pr-1">
+                <div class="bg-slate-800/80 p-4 rounded-xl border border-slate-700">
+                    <h4 class="font-bold text-emerald-400 mb-1">🎯 Objective & Boundaries</h4>
+                    <p class="text-xs text-slate-300 leading-relaxed">
+                        Start at <strong>99 marks</strong> and reduce your score to <strong>EXACTLY 0 marks</strong>!<br>
+                        ⚠️ <strong>Danger Boundary (-20 to 120):</strong> Keep your marks between <strong>-20 and 120</strong>. If a throw surpasses <strong>-20 on the left hand side</strong> or 120 on the right, your stickman falls directly from that edge behind the board!
+                    </p>
+                </div>
+
+                <div class="bg-slate-800/80 p-4 rounded-xl border border-slate-700">
+                    <h4 class="font-bold text-cyan-400 mb-2">➕/➖ Directed Number Addition Formula</h4>
+                    <p class="text-xs text-slate-400 mb-2 font-mono text-center bg-slate-900 p-2 rounded border border-slate-700">
+                        New Score = Current Score + (Dart Sign × Target Value)
+                    </p>
+                    <div class="grid grid-cols-2 gap-2 text-xs font-mono">
+                        <div class="p-2 bg-slate-900 border border-emerald-500/30 rounded-lg text-emerald-300">
+                            <strong>(- Dart) × (+ Target)</strong> = <strong>- Negative</strong><br>
+                            99 + [(-1) × (+9)] = <strong>90</strong> (Reduces score)
+                        </div>
+                        <div class="p-2 bg-slate-900 border border-emerald-500/30 rounded-lg text-emerald-300">
+                            <strong>(+ Dart) × (- Target)</strong> = <strong>- Negative</strong><br>
+                            90 + [(+1) × (-5)] = <strong>85</strong> (Reduces score)
+                        </div>
+                        <div class="p-2 bg-slate-900 border border-red-500/30 rounded-lg text-red-300">
+                            <strong>(+ Dart) × (+ Target)</strong> = <strong>+ Positive</strong><br>
+                            85 + [(+1) × (+4)] = <strong>89</strong> (Increases score)
+                        </div>
+                        <div class="p-2 bg-slate-900 border border-red-500/30 rounded-lg text-red-300">
+                            <strong>(- Dart) × (- Target)</strong> = <strong>+ Positive</strong><br>
+                            89 + [(-1) × (-8)] = <strong>97</strong> (Increases score)
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-slate-800/80 p-4 rounded-xl border border-slate-700">
+                    <h4 class="font-bold text-sky-400 mb-1">🎯 Outer Ring Bonus</h4>
+                    <ul class="text-xs space-y-1.5 list-disc list-inside text-slate-300">
+                        <li><strong>Inner Wedge:</strong> Standard value ($1 \times \text{Sector}$).</li>
+                        <li><strong>Outer Ring:</strong> Double multiplier ($2 \times \text{Sector}$).</li>
+                    </ul>
+                </div>
+            </div>
+
+            <button id="understoodRulesBtn" class="mt-5 w-full py-2.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold rounded-xl transition">
+                Got it, let's play!
+            </button>
+        </div>
+    </div>
+
+    <!-- JavaScript Application Engine -->
+    <script>
+        class SoundFX {
+            constructor() {
+                this.enabled = true;
+                this.ctx = null;
+            }
+
+            initCtx() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioContext();
+                }
+            }
+
+            playThrow() {
+                if (!this.enabled) return;
+                this.initCtx();
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.15);
+            }
+
+            playHit() {
+                if (!this.enabled) return;
+                this.initCtx();
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(180, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(60, this.ctx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.1);
+            }
+
+            playWin() {
+                if (!this.enabled) return;
+                this.initCtx();
+                const notes = [523.25, 659.25, 783.99, 1046.50];
+                notes.forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime + idx * 0.12);
+                    gain.gain.setValueAtTime(0.3, this.ctx.currentTime + idx * 0.12);
+                    gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + idx * 0.12 + 0.3);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(this.ctx.currentTime + idx * 0.12);
+                    osc.stop(this.ctx.currentTime + idx * 0.12 + 0.3);
+                });
+            }
+
+            playFall() {
+                if (!this.enabled) return;
+                this.initCtx();
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(450, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(30, this.ctx.currentTime + 1.5);
+                gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 1.5);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 1.5);
+            }
+        }
+
+        const sfx = new SoundFX();
+
+        const SLICE_COUNT = 10;
+        let boardValues = [];
+        let currentScore = 99;
+        let aiScore = 99;
+        let currentTurn = 'player'; // 'player' or 'ai'
+        let totalThrows = 0;
+        let streak = 0;
+        let maxStreak = 0;
+        let selectedDart = 1; // +1 or -1
+        let isChallengeMode = false;
+        let pendingThrowData = null;
+        let isAnimatingThrow = false;
+        let activeDartsOnBoard = [];
+        let gameOver = false;
+
+        // Canvas & Context Setup
+        let canvas, ctx, container;
+        let cWidth = 480, cHeight = 480;
+
+        function resizeCanvas() {
+            if (!canvas || !container) return;
+            const rect = container.getBoundingClientRect();
+            
+            const size = Math.max(Math.floor(rect.width), 280);
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = size * dpr;
+            canvas.height = size * dpr;
+            
+            cWidth = size;
+            cHeight = size;
+
+            ctx.resetTransform();
+            ctx.scale(dpr, dpr);
+
+            drawBoard();
+        }
+
+        function generateBoardValues() {
+            boardValues = [];
+            const possibleValues = [-9, -8, -7, -6, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+            const weights = possibleValues.map(v => 10 - Math.abs(v));
+            const totalWeight = weights.reduce((acc, w) => acc + w, 0);
+
+            for (let i = 0; i < SLICE_COUNT; i++) {
+                let randomVal = 0;
+                let randomPoint = Math.random() * totalWeight;
+                
+                for (let j = 0; j < possibleValues.length; j++) {
+                    if (randomPoint < weights[j]) {
+                        randomVal = possibleValues[j];
+                        break;
+                    }
+                    randomPoint -= weights[j];
+                }
+                
+                boardValues.push(randomVal);
+            }
+        }
+
+        function drawBoard(highlightSlice = -1) {
+            if (!ctx) return;
+
+            ctx.clearRect(0, 0, cWidth, cHeight);
+            
+            const centerX = cWidth / 2;
+            const centerY = cHeight / 2;
+            const outerRadius = cWidth * 0.44;
+            const doubleRingInner = outerRadius * 0.82;
+
+            const sliceAngle = (Math.PI * 2) / SLICE_COUNT;
+
+            for (let i = 0; i < SLICE_COUNT; i++) {
+                const startAngle = i * sliceAngle - Math.PI / 2;
+                const endAngle = startAngle + sliceAngle;
+                const val = boardValues[i];
+
+                let sliceColor = (i % 2 === 0) ? '#1e293b' : '#334155';
+                if (i === highlightSlice) {
+                    sliceColor = '#475569';
+                }
+
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.arc(centerX, centerY, doubleRingInner, startAngle, endAngle);
+                ctx.closePath();
+                ctx.fillStyle = sliceColor;
+                ctx.fill();
+                ctx.strokeStyle = '#0f172a';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, outerRadius, startAngle, endAngle);
+                ctx.arc(centerX, centerY, doubleRingInner, endAngle, startAngle, true);
+                ctx.closePath();
+                ctx.fillStyle = val > 0 ? '#059669' : '#dc2626';
+                ctx.fill();
+                ctx.strokeStyle = '#0f172a';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                const midAngle = startAngle + sliceAngle / 2;
+                const textRadius = doubleRingInner * 0.58;
+                const tx = centerX + Math.cos(midAngle) * textRadius;
+                const ty = centerY + Math.sin(midAngle) * textRadius;
+
+                ctx.save();
+                ctx.translate(tx, ty);
+                ctx.fillStyle = val > 0 ? '#4ade80' : '#f87171';
+                const fontSize = Math.max(Math.floor(cWidth * 0.045), 14);
+                ctx.font = `bold ${fontSize}px Fredoka, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.shadowColor = 'rgba(0,0,0,0.8)';
+                ctx.shadowBlur = 4;
+                ctx.fillText((val > 0 ? '+' : '') + val, 0, 0);
+                ctx.restore();
+            }
+
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, outerRadius, 0, Math.PI * 2);
+            ctx.lineWidth = 5;
+            ctx.strokeStyle = '#06b6d4';
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 5, 0, Math.PI * 2);
+            ctx.fillStyle = '#06b6d4';
+            ctx.fill();
+
+            activeDartsOnBoard.forEach(dart => {
+                drawDartIcon(dart.x, dart.y, dart.color);
+            });
+        }
+
+        function drawDartIcon(x, y, color) {
+            ctx.save();
+            ctx.translate(x, y);
+
+            ctx.beginPath();
+            ctx.arc(2, 2, 6, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(0,0,0,0.4)';
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(0, 0, 6, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function handleBoardClick(event) {
+            if (isAnimatingThrow || currentTurn !== 'player' || gameOver) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const clickX = event.clientX - rect.left;
+            const clickY = event.clientY - rect.top;
+
+            const centerX = cWidth / 2;
+            const centerY = cHeight / 2;
+            const dx = clickX - centerX;
+            const dy = clickY - centerY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            const outerRadius = cWidth * 0.44;
+            const doubleRingInner = outerRadius * 0.82;
+
+            if (dist > outerRadius) return;
+
+            let hitValue = 0;
+            let isDouble = false;
+
+            let angle = Math.atan2(dy, dx) + Math.PI / 2;
+            if (angle < 0) angle += Math.PI * 2;
+
+            const sliceAngle = (Math.PI * 2) / SLICE_COUNT;
+            const sliceIndex = Math.floor(angle / sliceAngle) % SLICE_COUNT;
+
+            hitValue = boardValues[sliceIndex];
+            if (dist >= doubleRingInner && dist <= outerRadius) {
+                isDouble = true;
+            }
+
+            let rawPoints = hitValue;
+            if (isDouble) rawPoints *= 2;
+
+            const activeScore = currentScore;
+            const dartOutcome = selectedDart * rawPoints;
+            const newTotalScore = activeScore + dartOutcome;
+
+            const throwData = {
+                clickX,
+                clickY,
+                dartType: selectedDart,
+                hitValue,
+                isDouble,
+                dartOutcome,
+                newTotalScore,
+                actor: 'player'
+            };
+
+            animateThrow(clickX, clickY, selectedDart > 0 ? '#22c55e' : '#ef4444', () => {
+                if (isChallengeMode) {
+                    promptMathChallenge(throwData);
+                } else {
+                    processThrowResult(throwData);
+                }
+            });
+        }
+
+        function makeAIMove() {
+            if (currentTurn !== 'ai' || isAnimatingThrow || gameOver) return;
+
+            const outerRadius = cWidth * 0.44;
+            const doubleRingInner = outerRadius * 0.82;
+            const centerX = cWidth / 2;
+            const centerY = cHeight / 2;
+            const sliceAngle = (Math.PI * 2) / SLICE_COUNT;
+
+            let safeOptions = [];
+
+            for (let i = 0; i < SLICE_COUNT; i++) {
+                const val = boardValues[i];
+                [1, -1].forEach(dartType => {
+                    [false, true].forEach(isDouble => {
+                        const raw = val * (isDouble ? 2 : 1);
+                        const outcome = dartType * raw;
+                        const projected = aiScore + outcome;
+                        
+                        if (projected >= -20 && projected <= 120) {
+                            safeOptions.push({
+                                sliceIndex: i,
+                                dartType,
+                                isDouble,
+                                val,
+                                outcome,
+                                isReducing: outcome < 0
+                            });
+                        }
+                    });
+                });
+            }
+
+            let chosen;
+            const reducingOptions = safeOptions.filter(o => o.isReducing);
+            
+            if (reducingOptions.length > 0) {
+                chosen = reducingOptions[Math.floor(Math.random() * reducingOptions.length)];
+            } else if (safeOptions.length > 0) {
+                chosen = safeOptions[Math.floor(Math.random() * safeOptions.length)];
+            } else {
+                chosen = {
+                    sliceIndex: 0,
+                    dartType: 1,
+                    isDouble: false,
+                    val: boardValues[0],
+                    outcome: boardValues[0]
+                };
+            }
+
+            const midAngle = chosen.sliceIndex * sliceAngle - Math.PI / 2 + sliceAngle / 2;
+            const r = chosen.isDouble ? (doubleRingInner + outerRadius) / 2 : doubleRingInner * 0.58;
+            const clickX = centerX + Math.cos(midAngle) * r;
+            const clickY = centerY + Math.sin(midAngle) * r;
+
+            const newTotalScore = aiScore + chosen.outcome;
+
+            const throwData = {
+                clickX,
+                clickY,
+                dartType: chosen.dartType,
+                hitValue: chosen.val,
+                isDouble: chosen.isDouble,
+                dartOutcome: chosen.outcome,
+                newTotalScore,
+                actor: 'ai'
+            };
+
+            animateThrow(clickX, clickY, chosen.dartType > 0 ? '#22c55e' : '#ef4444', () => {
+                processThrowResult(throwData);
+            });
+        }
+
+        function animateThrow(targetX, targetY, dartColor, callback) {
+            isAnimatingThrow = true;
+            sfx.playThrow();
+
+            const startX = cWidth / 2;
+            const startY = cHeight + 50;
+            const duration = 250;
+            const startTime = performance.now();
+
+            function step(now) {
+                const elapsed = now - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+
+                const currentX = startX + (targetX - startX) * progress;
+                const currentY = startY + (targetY - startY) * progress;
+
+                drawBoard();
+                
+                ctx.save();
+                ctx.translate(currentX, currentY);
+                const scale = 1 + (1 - progress) * 1.5;
+                ctx.scale(scale, scale);
+                drawDartIcon(0, 0, dartColor);
+                ctx.restore();
+
+                if (progress < 1) {
+                    requestAnimationFrame(step);
+                } else {
+                    sfx.playHit();
+                    activeDartsOnBoard.push({
+                        x: targetX,
+                        y: targetY,
+                        color: dartColor
+                    });
+                    drawBoard();
+                    isAnimatingThrow = false;
+                    callback();
+                }
+            }
+
+            requestAnimationFrame(step);
+        }
+
+        function triggerStickmanFall(actor, finalScore, onComplete) {
+            gameOver = true;
+            sfx.playFall();
+
+            const stickmanId = actor === 'player' ? 'playerStickman' : 'aiStickman';
+            const stickmanEl = document.getElementById(stickmanId);
+            
+            // Explicitly force stickman to left side (0%) if dropped below -20, or right side (100%) if above 120
+            const edgePercentage = finalScore < -20 ? 0 : 100;
+
+            // Remove CSS transition for instant snap to edge before fall animation
+            stickmanEl.classList.remove('transition-all', 'duration-500');
+            stickmanEl.style.left = `${edgePercentage}%`;
+
+            // Trigger vertical downward falling animation
+            requestAnimationFrame(() => {
+                stickmanEl.classList.add('stickman-falling');
+            });
+
+            setTimeout(() => {
+                onComplete();
+            }, 1500);
+        }
+
+        function processThrowResult(data) {
+            const isPlayer = data.actor === 'player';
+            const prevScore = isPlayer ? currentScore : aiScore;
+            
+            if (isPlayer) {
+                currentScore = data.newTotalScore;
+                totalThrows++;
+                streak++;
+                if (streak > maxStreak) maxStreak = streak;
+            } else {
+                aiScore = data.newTotalScore;
+            }
+
+            const dartSignStr = data.dartType > 0 ? '(+1)' : '(-1)';
+            const hitValStr = data.hitValue >= 0 ? `(+${data.hitValue})` : `(${data.hitValue})`;
+            const doubleMultiplier = data.isDouble ? ' × 2' : '';
+            
+            const exprText = `${prevScore} + [${dartSignStr} × ${hitValStr}${doubleMultiplier}]`;
+
+            addHistoryLog(prevScore, exprText, data.newTotalScore, data.actor);
+            updateUI();
+
+            // Check boundary breach loss condition (-20 to 120 range)
+            if (data.newTotalScore < -20 || data.newTotalScore > 120) {
+                triggerStickmanFall(data.actor, data.newTotalScore, () => {
+                    triggerBoundaryDefeat(data.actor, data.newTotalScore);
+                });
+                return;
+            }
+
+            if (data.newTotalScore === 0) {
+                gameOver = true;
+                triggerVictory(data.actor);
+                return;
+            }
+
+            // Switch turn
+            currentTurn = isPlayer ? 'ai' : 'player';
+            updateTurnUI();
+
+            // Reshuffle after EVERY throw
+            generateBoardValues();
+            activeDartsOnBoard = [];
+            drawBoard();
+            showTemporaryHint("Board values reshuffled!");
+
+            if (currentTurn === 'ai') {
+                setTimeout(makeAIMove, 1000);
+            }
+        }
+
+        function updateTurnUI() {
+            const playerCard = document.getElementById('playerScoreCard');
+            const aiCard = document.getElementById('aiScoreCard');
+            const playerBadge = document.getElementById('playerTurnBadge');
+            const aiBadge = document.getElementById('aiTurnBadge');
+
+            if (currentTurn === 'player') {
+                playerCard.className = "bg-slate-900/60 p-3.5 rounded-xl border-2 border-cyan-500/80 relative";
+                aiCard.className = "bg-slate-900/60 p-3.5 rounded-xl border border-slate-700/80 opacity-70 relative";
+                playerBadge.classList.remove('hidden');
+                aiBadge.classList.add('hidden');
+            } else {
+                aiCard.className = "bg-slate-900/60 p-3.5 rounded-xl border-2 border-purple-500/80 relative";
+                playerCard.className = "bg-slate-900/60 p-3.5 rounded-xl border border-slate-700/80 opacity-70 relative";
+                aiBadge.classList.remove('hidden');
+                playerBadge.classList.add('hidden');
+            }
+        }
+
+        function promptMathChallenge(data) {
+            pendingThrowData = data;
+            const modal = document.getElementById('mathChallengeModal');
+            const eqText = document.getElementById('challengeEquationText');
+            const optionsGrid = document.getElementById('challengeOptionsGrid');
+            const feedback = document.getElementById('challengeFeedback');
+
+            feedback.textContent = '';
+            
+            const dartStr = data.dartType > 0 ? '(+1)' : '(-1)';
+            const hitStr = data.hitValue >= 0 ? `(+${data.hitValue})` : `(${data.hitValue})`;
+            const doubleStr = data.isDouble ? ' × 2' : '';
+            
+            eqText.textContent = `${currentScore} + [${dartStr} × ${hitStr}${doubleStr}] = ?`;
+
+            const correctAnswer = data.newTotalScore;
+
+            const options = new Set([correctAnswer]);
+            while (options.size < 4) {
+                const fakeOffset = (Math.floor(Math.random() * 5) + 1) * (Math.random() < 0.5 ? 1 : -1);
+                options.add(correctAnswer + fakeOffset);
+            }
+
+            const sortedOptions = Array.from(options).sort(() => Math.random() - 0.5);
+
+            optionsGrid.innerHTML = '';
+            sortedOptions.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = "py-3 px-4 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-xl text-lg font-mono font-bold text-white transition";
+                btn.textContent = opt;
+                btn.onclick = () => {
+                    if (opt === correctAnswer) {
+                        feedback.className = "text-sm font-semibold text-emerald-400";
+                        feedback.textContent = "Correct calculation!";
+                        setTimeout(() => {
+                            modal.classList.add('hidden');
+                            processThrowResult(pendingThrowData);
+                        }, 500);
+                    } else {
+                        feedback.className = "text-sm font-semibold text-red-400";
+                        feedback.textContent = "Incorrect! Try again.";
+                        streak = 0;
+                        updateUI();
+                    }
+                };
+                optionsGrid.appendChild(btn);
+            });
+
+            modal.classList.remove('hidden');
+        }
+
+        function triggerVictory(winner) {
+            sfx.playWin();
+            if (typeof confetti === 'function') {
+                confetti({
+                    particleCount: 130,
+                    spread: 90,
+                    origin: { y: 0.6 }
+                });
+            }
+
+            const title = document.getElementById('victoryTitle');
+            const msg = document.getElementById('victoryMessage');
+            const icon = document.getElementById('victoryIcon');
+
+            icon.textContent = "🏆";
+            icon.className = "w-20 h-20 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center text-4xl mx-auto mb-4 animate-bounce";
+
+            if (winner === 'player') {
+                title.textContent = "EXACTLY 0! YOU WIN!";
+                title.className = "text-3xl font-extrabold font-display text-emerald-400";
+                msg.textContent = "Outstanding! You deducted directed numbers with exact precision to hit 0 marks!";
+            } else {
+                title.textContent = "GAME OVER! AI WINS!";
+                title.className = "text-3xl font-extrabold font-display text-purple-400";
+                msg.textContent = "The AI opponent reached exactly 0 marks first!";
+            }
+
+            document.getElementById('victoryThrowsCount').textContent = totalThrows;
+            document.getElementById('victoryStreakCount').textContent = maxStreak;
+            document.getElementById('victoryModal').classList.remove('hidden');
+        }
+
+        function triggerBoundaryDefeat(actor, score) {
+            const title = document.getElementById('victoryTitle');
+            const msg = document.getElementById('victoryMessage');
+            const icon = document.getElementById('victoryIcon');
+
+            icon.textContent = "💀";
+            icon.className = "w-20 h-20 bg-red-500/20 text-red-400 rounded-full flex items-center justify-center text-4xl mx-auto mb-4 animate-bounce";
+
+            if (actor === 'player') {
+                title.textContent = "YOU PLUMMETED DOWN!";
+                title.className = "text-3xl font-extrabold font-display text-red-500";
+                msg.textContent = `Your score dropped to ${score}, surpassing -20 on the left side of the number line! Your stickman plummeted off the edge!`;
+            } else {
+                title.textContent = "AI FELL OFF! YOU WIN!";
+                title.className = "text-3xl font-extrabold font-display text-emerald-400";
+                msg.textContent = `The AI reached ${score} marks and dropped off the left hand side of the number line! You win!`;
+            }
+
+            document.getElementById('victoryThrowsCount').textContent = totalThrows;
+            document.getElementById('victoryStreakCount').textContent = maxStreak;
+            document.getElementById('victoryModal').classList.remove('hidden');
+        }
+
+        function updateUI() {
+            document.getElementById('currentScoreDisplay').textContent = currentScore;
+            document.getElementById('aiScoreDisplay').textContent = aiScore;
+            document.getElementById('streakCount').textContent = streak;
+
+            // Map score to percentage on line (-20..120)
+            const mapScoreToPercentage = (score) => {
+                const clamped = Math.max(-20, Math.min(120, score));
+                return ((clamped + 20) / 140) * 100;
+            };
+
+            const playerStickman = document.getElementById('playerStickman');
+            const aiStickman = document.getElementById('aiStickman');
+
+            if (!gameOver) {
+                const playerPct = mapScoreToPercentage(currentScore);
+                const aiPct = mapScoreToPercentage(aiScore);
+
+                playerStickman.style.left = `${playerPct}%`;
+                aiStickman.style.left = `${aiPct}%`;
+            }
+
+            const posBtn = document.getElementById('selectPosDartBtn');
+            const negBtn = document.getElementById('selectNegDartBtn');
+            const activeLabel = document.getElementById('activeDartLabel');
+
+            if (selectedDart === 1) {
+                posBtn.className = "relative group p-4 rounded-xl border-2 transition-all duration-200 flex flex-col items-center justify-center gap-2 border-emerald-500 bg-emerald-950/40 glow-pos";
+                negBtn.className = "relative group p-4 rounded-xl border-2 transition-all duration-200 flex flex-col items-center justify-center gap-2 border-slate-700 bg-slate-800/50 hover:border-red-500/50";
+                activeLabel.textContent = "Positive (+)";
+                activeLabel.className = "font-bold text-emerald-400";
+            } else {
+                posBtn.className = "relative group p-4 rounded-xl border-2 transition-all duration-200 flex flex-col items-center justify-center gap-2 border-slate-700 bg-slate-800/50 hover:border-emerald-500/50";
+                negBtn.className = "relative group p-4 rounded-xl border-2 transition-all duration-200 flex flex-col items-center justify-center gap-2 border-red-500 bg-red-950/40 glow-neg";
+                activeLabel.textContent = "Negative (-)";
+                activeLabel.className = "font-bold text-red-400";
+            }
+        }
+
+        function addHistoryLog(prev, expr, current, actor = 'player') {
+            const logContainer = document.getElementById('historyList');
+            if (logContainer.children.length === 1 && logContainer.children[0].classList.contains('italic')) {
+                logContainer.innerHTML = '';
+            }
+
+            const actorTag = actor === 'player' ? '<span class="text-cyan-400 font-bold mr-1">[You]</span>' : '<span class="text-purple-400 font-bold mr-1">[AI]</span>';
+
+            const logItem = document.createElement('div');
+            logItem.className = "p-2 bg-slate-900/80 border border-slate-700/60 rounded-lg flex justify-between items-center text-xs";
+            logItem.innerHTML = `
+                <div class="flex items-center">
+                    ${actorTag}
+                    <span class="text-slate-400">${prev}</span>
+                </div>
+                <span class="text-cyan-300 font-semibold">${expr}</span>
+                <span class="${current <= prev ? 'text-emerald-400' : 'text-amber-400'} font-bold">➜ ${current}</span>
+            `;
+            logContainer.prepend(logItem);
+        }
+
+        function showTemporaryHint(msg) {
+            const hint = document.getElementById('statusHint');
+            if (currentTurn === 'ai') {
+                hint.textContent = "AI is thinking...";
+            } else {
+                hint.textContent = msg;
+                setTimeout(() => {
+                    if (currentTurn === 'player' && !gameOver) hint.textContent = "Ready to throw";
+                }, 2000);
+            }
+        }
+
+        function resetStickmanElement(id) {
+            const el = document.getElementById(id);
+            el.className = "stickman-container absolute top-2 -translate-x-1/2 transition-all duration-500 flex flex-col items-center pointer-events-none";
+            el.style.left = '85%';
+            el.style.top = '';
+            el.style.transform = '';
+        }
+
+        function resetGame() {
+            currentScore = 99;
+            aiScore = 99;
+            currentTurn = 'player';
+            totalThrows = 0;
+            streak = 0;
+            maxStreak = 0;
+            gameOver = false;
+            activeDartsOnBoard = [];
+            
+            resetStickmanElement('playerStickman');
+            resetStickmanElement('aiStickman');
+
+            generateBoardValues();
+            document.getElementById('historyList').innerHTML = '<div class="text-slate-500 text-center py-6 italic">No throws recorded yet. Aim and hit the target!</div>';
+            updateTurnUI();
+            updateUI();
+            drawBoard();
+        }
+
+        window.onload = function() {
+            canvas = document.getElementById('dartboardCanvas');
+            ctx = canvas.getContext('2d');
+            container = document.getElementById('canvasContainer');
+
+            generateBoardValues();
+            resizeCanvas();
+
+            window.addEventListener('resize', resizeCanvas);
+
+            canvas.addEventListener('click', handleBoardClick);
+
+            const crosshair = document.getElementById('targetCrosshair');
+            canvas.addEventListener('mousemove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                crosshair.style.left = `${e.clientX - rect.left}px`;
+                crosshair.style.top = `${e.clientY - rect.top}px`;
+                crosshair.classList.remove('hidden');
+            });
+            canvas.addEventListener('mouseleave', () => {
+                crosshair.classList.add('hidden');
+            });
+
+            document.getElementById('selectPosDartBtn').onclick = () => {
+                selectedDart = 1;
+                updateUI();
+            };
+            document.getElementById('selectNegDartBtn').onclick = () => {
+                selectedDart = -1;
+                updateUI();
+            };
+
+            document.getElementById('challengeModeToggle').onchange = (e) => {
+                isChallengeMode = e.target.checked;
+            };
+
+            document.getElementById('shuffleBoardBtn').onclick = () => {
+                generateBoardValues();
+                activeDartsOnBoard = [];
+                drawBoard();
+                showTemporaryHint("Board reshuffled!");
+            };
+
+            document.getElementById('clearLogBtn').onclick = () => {
+                document.getElementById('historyList').innerHTML = '<div class="text-slate-500 text-center py-6 italic">History cleared.</div>';
+            };
+
+            document.getElementById('playAgainBtn').onclick = () => {
+                document.getElementById('victoryModal').classList.add('hidden');
+                resetGame();
+            };
+
+            document.getElementById('rulesBtn').onclick = () => {
+                document.getElementById('rulesModal').classList.remove('hidden');
+            };
+            document.getElementById('closeRulesBtn').onclick = () => {
+                document.getElementById('rulesModal').classList.add('hidden');
+            };
+            document.getElementById('understoodRulesBtn').onclick = () => {
+                document.getElementById('rulesModal').classList.add('hidden');
+            };
+
+            document.getElementById('resetGameBtn').onclick = resetGame;
+
+            document.getElementById('soundToggleBtn').onclick = () => {
+                sfx.enabled = !sfx.enabled;
+                const icon = document.getElementById('soundIcon');
+                if (sfx.enabled) {
+                    icon.className = "fa-solid fa-volume-high text-emerald-400";
+                } else {
+                    icon.className = "fa-solid fa-volume-xmark text-slate-500";
+                }
+            };
+        };
+    </script>
+</body>
+</html>
